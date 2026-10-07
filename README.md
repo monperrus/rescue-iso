@@ -34,6 +34,12 @@ new password on the next build.
 ⚠️ The password is shown on screen and sshd listens on a public address: boot it only for
 the debugging session.
 
+## Story
+
+How it was used to repair a server that a release upgrade left stuck at GRUB, with
+Claude Code doing the remote work:
+<https://gist.github.com/monperrus/24296cc2f096f8dd476ec8135e978c95>
+
 ## License
 
 MIT

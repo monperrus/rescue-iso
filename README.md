@@ -10,10 +10,14 @@ screen everything needed to log in remotely:
 - the same banner is posted to the crabe endpoint as hostname `tiramisu-rescue`
   (`curl -s https://www.monperrus.net/martin/crabe.py`), so the IP can be found remotely.
 
-It is the official Alpine extended ISO (GPG-verified) plus an `apkovl` overlay and new boot
-menus (including a `nomodeset` entry), remastered with xorriso: no root needed, BIOS and
-UEFI, all rescue packages (lvm2, cryptsetup, mdadm, e2fsprogs, btrfs-progs, xfsprogs,
-parted, efibootmgr, tmux…) installed from the stick itself, no internet needed.
+It is the official Alpine standard ISO (GPG-verified), remastered with xorriso (no root
+needed, BIOS and UEFI, ~380 MB so it fits a 1 GB stick), plus
+
+- `/extra`: a second boot repository with the extended ISO's signed `APKINDEX` and only the
+  53 packages (13 MB) that the rescue tools need (lvm2, cryptsetup, mdadm, btrfs-progs,
+  xfsprogs, parted, efibootmgr, tmux…), computed by `closure.py`; both ISOs are the same
+  release with the same kernel, and everything installs from the stick, no internet needed;
+- an `apkovl` overlay and new boot menus (including a `nomodeset` entry).
 
 ## Usage
 

@@ -1,0 +1,60 @@
+#!/bin/sh
+# Rescue boot: DHCP on every NIC, root password, on-screen banner, phone home.
+# Runs once from OpenRC's `local` service; the banner loop keeps running in background.
+
+PASSWORD="$(cat /etc/rescue/password)"
+echo "root:$PASSWORD" | chpasswd
+
+for dev in /sys/class/net/*; do
+	ifname="${dev##*/}"
+	[ "$ifname" = lo ] && continue
+	ip link set "$ifname" up
+	udhcpc -b -q -S -i "$ifname" -x hostname:tiramisu-rescue >/dev/null 2>&1
+done
+
+addresses() {
+	ip -4 -o addr show scope global | awk '{print $2 " " $4}'
+}
+
+banner() {
+	printf '\n=================== TIRAMISU RESCUE ===================\n'
+	printf '  ssh root@<ip>      password: %s\n' "$PASSWORD"
+	printf '  (key ~/.ssh/assert-server.private also accepted)\n'
+	printf '  addresses:\n'
+	addresses | sed 's/^/    /'
+	printf '  sshd host keys:\n'
+	for k in /etc/ssh/ssh_host_*_key.pub; do
+		ssh-keygen -lf "$k" | sed 's/^/    /'
+	done
+	printf '========================================================\n\n'
+}
+
+phone_home() {
+	# skip inside the QEMU test harness
+	grep -q QEMU /sys/class/dmi/id/sys_vendor 2>/dev/null && return
+	public_ip="$(curl -fsS -m 10 https://api.ipify.org 2>/dev/null)"
+	payload="$(printf '{"payload":{"machine_id":"%s","hostname":"tiramisu-rescue","public_ip":"%s","addresses":"%s","host_keys":"%s"},"signatures":{}}' \
+		"$(cat /sys/class/dmi/id/product_uuid 2>/dev/null)" "$public_ip" \
+		"$(addresses | tr '\n' ';')" \
+		"$(for k in /etc/ssh/ssh_host_*_key.pub; do ssh-keygen -lf "$k"; done | tr '\n' ';')")"
+	curl -fsS -m 10 -o /dev/null -H 'Content-Type: application/json' \
+		--data "$payload" https://www.monperrus.net/martin/crabe.py
+}
+
+(
+	last=""
+	n=0
+	while true; do
+		current="$(addresses)"
+		banner > /etc/issue
+		if [ "$current" != "$last" ]; then
+			banner > /dev/tty1
+			[ -n "$current" ] && phone_home
+			last="$current"
+		fi
+		# re-announce every 10 minutes even if nothing changed
+		n=$((n + 1))
+		[ $((n % 60)) -eq 0 ] && { banner > /dev/tty1; [ -n "$current" ] && phone_home; }
+		sleep 10
+	done
+) >/dev/null 2>&1 &

@@ -1,7 +1,7 @@
 #!/bin/sh
 # Build out/tiramisu-rescue.iso (~400 MB, fits a 1 GB stick): the official Alpine standard
 # ISO, plus the rescue packages and their dependencies taken from the extended ISO's signed
-# repository (same release, same kernel), plus an apkovl overlay (sshd with key + password,
+# repository (same release, same kernel), plus an apkovl overlay (sshd with key and/or password,
 # DHCP on every NIC, on-screen banner). No root needed.
 set -eu
 cd "$(dirname "$0")"
@@ -10,7 +10,9 @@ VERSION=3.24.2
 ISO="alpine-standard-$VERSION-x86_64.iso"
 EXTENDED="alpine-extended-$VERSION-x86_64.iso"
 MIRROR="https://dl-cdn.alpinelinux.org/alpine/v${VERSION%.*}/releases/x86_64"
-PUBKEY="${RESCUE_PUBKEY:-$HOME/.ssh/id_ed25519.pub}"
+# RESCUE_PUBKEY set: private build with that key and a fixed password (out/password).
+# Unset: generic build, no credentials; random password at each boot, see inject-key.sh.
+PUBKEY="${RESCUE_PUBKEY:-}"
 # on the standard ISO
 BASE_PACKAGES="alpine-base openssh e2fsprogs"
 # grafted from the extended ISO
@@ -38,7 +40,7 @@ for p in $BASE_PACKAGES; do
 done
 
 # password: three short words, simple to type from the screen
-[ -f out/password ] || shuf -n 3 --random-source=/dev/urandom words.txt | paste -sd- > out/password
+if [ -n "$PUBKEY" ] && [ ! -f out/password ]; then shuf -n 3 --random-source=/dev/urandom words.txt | paste -sd- > out/password; fi
 
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
@@ -62,10 +64,13 @@ mkdir -p "$o/etc/apk" "$o/etc/rescue" "$o/root/.ssh" "$o/etc/runlevels/default"
 echo tiramisu-rescue > "$o/etc/hostname"
 printf '127.0.0.1\ttiramisu-rescue localhost\n' > "$o/etc/hosts"
 echo "$PACKAGES" | tr ' ' '\n' | grep . > "$o/etc/apk/world"
-cp out/password "$o/etc/rescue/password"
-cp "$PUBKEY" "$o/root/.ssh/authorized_keys"
+cp words.txt "$o/etc/rescue/words.txt"
+if [ -n "$PUBKEY" ]; then
+	cp out/password "$o/etc/rescue/password"
+	cp "$PUBKEY" "$o/root/.ssh/authorized_keys"
+	chmod 600 "$o/etc/rescue/password" "$o/root/.ssh/authorized_keys"
+fi
 chmod 700 "$o/root" "$o/root/.ssh" "$o/etc/rescue"
-chmod 600 "$o/root/.ssh/authorized_keys" "$o/etc/rescue/password"
 chmod 755 "$o/etc/local.d/rescue.start"
 # keep Alpine's default sysinit/boot/shutdown services alongside ours
 touch "$o/etc/.default_boot_services"
@@ -112,4 +117,4 @@ xorriso -indev "cache/$ISO" -outdev out/tiramisu-rescue.iso \
 	-map "$work/grub.cfg" /boot/grub/grub.cfg \
 	-map "$work/syslinux.cfg" /boot/syslinux/syslinux.cfg \
 	-boot_image any replay 2>/dev/null
-echo "out/tiramisu-rescue.iso  password: $(cat out/password)"
+if [ -n "$PUBKEY" ]; then echo "out/tiramisu-rescue.iso  password: $(cat out/password)"; else echo "out/tiramisu-rescue.iso  generic (random password at boot)"; fi

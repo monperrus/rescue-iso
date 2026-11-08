@@ -1,14 +1,15 @@
 #!/bin/sh
 # Boot out/tiramisu-rescue.iso in QEMU as a USB stick and check it is remotely debuggable.
-# usage: ./test.sh [bios|uefi]
+# usage: ./test.sh [bios|uefi]   (tests a generic ISO with a throwaway key injected)
 set -eu
 cd "$(dirname "$0")"
 
 FIRMWARE="${1:-bios}"
 PORT=2222
-ISO=out/tiramisu-rescue.iso
-PASSWORD="$(cat out/password)"
 work="$(mktemp -d)"
+ssh-keygen -q -t ed25519 -N "" -f "$work/key"
+./inject-key.sh out/tiramisu-rescue.iso "$work/key.pub" "$work/test.iso"
+ISO="$work/test.iso"
 SSH="ssh -p $PORT -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=5 -o LogLevel=ERROR"
 
 firmware_args=""
@@ -29,13 +30,16 @@ trap 'kill "$(cat "$work/qemu.pid")" 2>/dev/null; rm -rf "$work"' EXIT
 fail() { echo "FAIL ($FIRMWARE): $*" >&2; exit 1; }
 
 i=0
-KEY="-o BatchMode=yes -o IdentitiesOnly=yes -i ${RESCUE_KEY:-${RESCUE_PUBKEY:-$HOME/.ssh/id_ed25519.pub}}"
+KEY="-o BatchMode=yes -o IdentitiesOnly=yes -i $work/key"
 until $SSH $KEY root@127.0.0.1 true 2>/dev/null; do
 	i=$((i + 1))
 	[ $i -gt 36 ] && fail "no key login after 180 s"
 	sleep 5
 done
 echo "ok   key login"
+
+PASSWORD="$($SSH $KEY root@127.0.0.1 "sleep 12; sed -n 's/.*password: //p' /etc/issue")"
+[ -n "$PASSWORD" ] || fail "no password in banner"
 
 sshpass -p "$PASSWORD" $SSH -o PubkeyAuthentication=no root@127.0.0.1 true \
 	|| fail "password login refused"

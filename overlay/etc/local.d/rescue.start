@@ -2,7 +2,12 @@
 # Rescue boot: DHCP on every NIC, root password, on-screen banner.
 # Runs once from OpenRC's `local` service; the banner loop keeps running in background.
 
-PASSWORD="$(cat /etc/rescue/password)"
+if [ -f /etc/rescue/password ]; then
+	PASSWORD="$(cat /etc/rescue/password)"
+else
+	# generic image: four random words, different at every boot
+	PASSWORD="$(od -An -N16 -tu4 /dev/urandom | awk 'NR==FNR{n=split($0,r," ");next}{w[FNR]=$0}END{for(i=1;i<=4;i++)printf "%s%s",w[r[i]%FNR+1],(i<4?"-":"")}' - /etc/rescue/words.txt)"
+fi
 echo "root:$PASSWORD" | chpasswd
 
 for dev in /sys/class/net/*; do
@@ -19,7 +24,7 @@ addresses() {
 banner() {
 	printf '\n=================== TIRAMISU RESCUE ===================\n'
 	printf '  ssh root@<ip>      password: %s\n' "$PASSWORD"
-	printf '  (the authorized key is also accepted)\n'
+	printf '  (a key injected with inject-key.sh is also accepted)\n'
 	printf '  addresses:\n'
 	addresses | sed 's/^/    /'
 	printf '  sshd host keys:\n'

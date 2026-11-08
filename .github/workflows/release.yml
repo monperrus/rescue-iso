@@ -1,0 +1,28 @@
+name: release
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  iso:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y xorriso gnupg curl python3
+      - uses: actions/cache@v4
+        with:
+          path: cache
+          key: alpine-${{ hashFiles('build.sh') }}
+      - run: ./build.sh
+      - run: sha256sum tiramisu-rescue.iso > tiramisu-rescue.iso.sha256
+        working-directory: out
+      - name: Replace the "latest" release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete latest --cleanup-tag --yes || true
+          gh release create latest out/tiramisu-rescue.iso out/tiramisu-rescue.iso.sha256 inject-key.sh \
+            --target "$GITHUB_SHA" --title "Latest ISO ($(git rev-parse --short HEAD))" \
+            --notes "Generic image: no credentials baked in, random password on screen at every boot. Add your key with \`./inject-key.sh tiramisu-rescue.iso ~/.ssh/id_ed25519.pub mine.iso\`, then \`dd\` it to a USB stick. Secure Boot must be disabled."

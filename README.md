@@ -1,15 +1,14 @@
 # rescue-iso
 
 Plug a coding agent into any computer, super easily. A 380 MB bootable USB image that
-brings a machine up with sshd, a known key and a password, so an AI coding agent such as
+brings a machine up with sshd, a password (and your key), so an AI coding agent such as
 Claude Code (or a human) can repair or inspect a machine that no longer boots, remotely.
 Plug it in, pick it in the boot menu, and everything else happens over SSH.
 
 It boots on BIOS and UEFI, gets DHCP on every NIC, starts sshd, and:
 
-- accepts `ssh root@<ip>` with a pre-baked public key (`RESCUE_PUBKEY`, default
-  `~/.ssh/id_ed25519.pub`) or a simple three-word password (generated once,
-  `out/password`);
+- accepts `ssh root@<ip>` with a four-word random password (new at every boot, shown on
+  screen) and, if you added one, your public key (see Usage);
 - prints on the console the IPv4 addresses, the password and the sshd host-key
   fingerprints;
 - ships the repair tools offline: lvm2, cryptsetup, mdadm, e2fsprogs, btrfs-progs,
@@ -17,18 +16,22 @@ It boots on BIOS and UEFI, gets DHCP on every NIC, starts sshd, and:
 
 ## Usage
 
+The [latest release](https://github.com/monperrus/rescue-iso/releases/latest) always holds
+the ISO built from `main`. It is generic: no credentials baked in.
+
 ```sh
-./build.sh          # -> out/tiramisu-rescue.iso, prints the password
-./test.sh bios      # boots it in QEMU as a USB stick, checks ssh key/password, banner, tools
-./test.sh uefi
-sudo dd if=out/tiramisu-rescue.iso of=/dev/sdX bs=4M conv=fsync status=progress
+./inject-key.sh tiramisu-rescue.iso ~/.ssh/id_ed25519.pub mine.iso   # optional: key login
+sudo dd if=mine.iso of=/dev/sdX bs=4M conv=fsync status=progress
 ```
 
-`RESCUE_PUBKEY=path.pub ./build.sh` authorizes another key. Delete `out/password` to get a
-new password on the next build. If the screen stays black, pick the `nomodeset` entry. An
-unsigned Alpine image needs Secure Boot disabled.
+Build it yourself: `./build.sh` makes the generic `out/tiramisu-rescue.iso`;
+`RESCUE_PUBKEY=path.pub ./build.sh` bakes that key and a fixed password (`out/password`,
+delete it to get a new one). `./test.sh bios|uefi` boots the image in QEMU as a USB stick.
 
-⚠️ The password is shown on screen, the wordlist is public (3 of 119 words, ~1.7 M
+If the screen stays black, pick the `nomodeset` entry. Alpine's image is unsigned: disable
+Secure Boot.
+
+⚠️ The password is shown on screen, the wordlist is public (4 of 119 words, ~2·10⁸
 combinations) and sshd listens on a public address: boot it only for the debugging
 session.
 
@@ -44,14 +47,14 @@ No root needed: the official Alpine *standard* ISO (GPG-verified) is remastered 
   `closure.py`. Alpine's init adds any directory holding a `.boot_repository` marker to
   `/etc/apk/repositories`.
 - The configuration is an `apkovl` overlay at the root of the media
-  (`overlay/` + generated hostname, world, authorized key and password). An empty
+  (`overlay/` + generated hostname, world, word list, optional key and password). An empty
   `etc/.default_boot_services` keeps Alpine's default boot services next to `sshd` and
   `local`.
 - `overlay/etc/local.d/rescue.start` does DHCP, sets the password, and runs the banner loop; `overlay/etc/ssh/sshd_config.d/rescue.conf` allows root and password
   login.
 - New boot menus: no `quiet`, `consoleblank=0`, plus a `nomodeset` entry.
 
-`test.sh` boots the image in QEMU as a USB stick and checks key login, password login,
+`test.sh` boots the image in QEMU as a USB stick with a throwaway injected key and checks key login, password login,
 wrong-password rejection, the banner, and that the tools are installed.
 
 ## First use: a server stuck at GRUB after a release upgrade

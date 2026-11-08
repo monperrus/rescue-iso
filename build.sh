@@ -2,7 +2,7 @@
 # Build out/tiramisu-rescue.iso (~400 MB, fits a 1 GB stick): the official Alpine standard
 # ISO, plus the rescue packages and their dependencies taken from the extended ISO's signed
 # repository (same release, same kernel), plus an apkovl overlay (sshd with key + password,
-# DHCP on every NIC, on-screen banner, phone home). No root needed.
+# DHCP on every NIC, on-screen banner). No root needed.
 set -eu
 cd "$(dirname "$0")"
 
@@ -10,7 +10,7 @@ VERSION=3.24.2
 ISO="alpine-standard-$VERSION-x86_64.iso"
 EXTENDED="alpine-extended-$VERSION-x86_64.iso"
 MIRROR="https://dl-cdn.alpinelinux.org/alpine/v${VERSION%.*}/releases/x86_64"
-PUBKEY="${RESCUE_PUBKEY:-$HOME/.ssh/assert-server.private.pub}"
+PUBKEY="${RESCUE_PUBKEY:-$HOME/.ssh/id_ed25519.pub}"
 # on the standard ISO
 BASE_PACKAGES="alpine-base openssh e2fsprogs"
 # grafted from the extended ISO

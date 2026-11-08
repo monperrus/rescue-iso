@@ -1,19 +1,17 @@
 # rescue-iso
 
-A 380 MB bootable USB image whose only job is to make a machine that no longer boots
-**remotely debuggable**, by a human or by an AI agent such as Claude Code. Plug it in, pick
-it in the boot menu, and everything else happens over SSH.
+Plug a coding agent into any computer, super easily. A 380 MB bootable USB image that
+brings a machine up with sshd, a known key and a password, so an AI coding agent such as
+Claude Code (or a human) can repair or inspect a machine that no longer boots, remotely.
+Plug it in, pick it in the boot menu, and everything else happens over SSH.
 
 It boots on BIOS and UEFI, gets DHCP on every NIC, starts sshd, and:
 
 - accepts `ssh root@<ip>` with a pre-baked public key (`RESCUE_PUBKEY`, default
-  `~/.ssh/assert-server.private.pub`) or a simple three-word password (generated once,
+  `~/.ssh/id_ed25519.pub`) or a simple three-word password (generated once,
   `out/password`);
 - prints on the console the IPv4 addresses, the password and the sshd host-key
   fingerprints;
-- **phones home**: posts the same information, as hostname `tiramisu-rescue`, to the crabe
-  endpoint (`curl -s https://www.monperrus.net/martin/crabe.py`) every time the address
-  changes (and every 10 minutes), so the IP can be found without anyone reading the screen;
 - ships the repair tools offline: lvm2, cryptsetup, mdadm, e2fsprogs, btrfs-progs,
   xfsprogs, parted, efibootmgr, pciutils, tmux, bash, curl.
 
@@ -49,8 +47,7 @@ No root needed: the official Alpine *standard* ISO (GPG-verified) is remastered 
   (`overlay/` + generated hostname, world, authorized key and password). An empty
   `etc/.default_boot_services` keeps Alpine's default boot services next to `sshd` and
   `local`.
-- `overlay/etc/local.d/rescue.start` does DHCP, sets the password, and runs the banner and
-  phone-home loop; `overlay/etc/ssh/sshd_config.d/rescue.conf` allows root and password
+- `overlay/etc/local.d/rescue.start` does DHCP, sets the password, and runs the banner loop; `overlay/etc/ssh/sshd_config.d/rescue.conf` allows root and password
   login.
 - New boot menus: no `quiet`, `consoleblank=0`, plus a `nomodeset` entry.
 
@@ -90,8 +87,6 @@ plugging in the stick; Claude Code did the rest over SSH.
      hook that renumbers by sensor name;
    - a final reboot to prove it.
 
-Full log of the machine: <https://github.com/ASSERT-KTH/communal-work/issues/8>.
-
 ### Lessons
 
 - **Release upgrades on headless servers**: run them inside `tmux`, with
@@ -101,7 +96,7 @@ Full log of the machine: <https://github.com/ASSERT-KTH/communal-work/issues/8>.
   wait forever on the menu.
 - Build the rescue stick **before** the incident, test it in QEMU, keep it next to the
   machine.
-- What an agent needs to take over: SSH, a way to find the IP (phone home), offline tools,
+- What an agent needs to take over: SSH, the IP shown on the console, offline tools,
   and `tmux`. Nothing more.
 - Cleanup pitfalls: replacing a PPA `python3.12` with Ubuntu's deleted
   `/usr/bin/python3.12` (owned by the PPA package) until `python3.12-minimal` was

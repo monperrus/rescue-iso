@@ -29,13 +29,13 @@ trap 'kill "$(cat "$work/qemu.pid")" 2>/dev/null; rm -rf "$work"' EXIT
 fail() { echo "FAIL ($FIRMWARE): $*" >&2; exit 1; }
 
 i=0
-KEY="-o BatchMode=yes -o IdentitiesOnly=yes -i $HOME/.ssh/assert-server.private.pub"
+KEY="-o BatchMode=yes -o IdentitiesOnly=yes -i ${RESCUE_KEY:-${RESCUE_PUBKEY:-$HOME/.ssh/id_ed25519.pub}}"
 until $SSH $KEY root@127.0.0.1 true 2>/dev/null; do
 	i=$((i + 1))
 	[ $i -gt 36 ] && fail "no key login after 180 s"
 	sleep 5
 done
-echo "ok   key login (assert-server)"
+echo "ok   key login"
 
 sshpass -p "$PASSWORD" $SSH -o PubkeyAuthentication=no root@127.0.0.1 true \
 	|| fail "password login refused"

@@ -23,7 +23,7 @@ fi
 qemu-system-x86_64 -enable-kvm -m 2048 -display none -snapshot $firmware_args \
 	-device qemu-xhci -drive if=none,id=stick,format=raw,file="$ISO" \
 	-device usb-storage,drive=stick,bootindex=0 \
-	-nic user,hostfwd=tcp:127.0.0.1:$PORT-:22 \
+	-nic user,hostfwd=tcp:127.0.0.1:$PORT-:22 -rtc base=2016-01-18 \
 	-pidfile "$work/qemu.pid" -daemonize
 trap 'kill "$(cat "$work/qemu.pid")" 2>/dev/null; rm -rf "$work"' EXIT
 
@@ -57,4 +57,16 @@ echo "ok   banner shows password and address"
 $SSH $KEY root@127.0.0.1 'for t in lsblk vgchange cryptsetup mdadm e2fsck btrfs xfs_repair efibootmgr parted lspci tmux chroot; do command -v $t >/dev/null || { echo missing $t; exit 1; }; done' \
 	|| fail "rescue tools missing"
 echo "ok   rescue tools present"
+
+# the RTC above simulates a dead CMOS battery; online fixes need the host's internet access
+year="$(date -u +%Y)"
+$SSH $KEY root@127.0.0.1 "i=0; until grep -q '^apk:' /var/log/rescue-online.log 2>/dev/null; do i=\$((i+1)); [ \$i -gt 30 ] && break; sleep 2; done; cat /var/log/rescue-online.log; [ \$(date -u +%Y) -ge $year ]" \
+	|| fail "clock still in 2016"
+echo "ok   clock set despite a 2016 RTC"
+$SSH $KEY root@127.0.0.1 "date -u -s '2016-01-18 00:00:00' >/dev/null; RESCUE_NO_NTP=1 rescue-online | tee /dev/stderr | grep -q 'HTTP Date' && [ \$(date -u +%Y) -ge $year ]" \
+	|| fail "HTTP Date fallback did not set the clock"
+echo "ok   clock set from the HTTP Date header without NTP"
+$SSH $KEY root@127.0.0.1 'apk add -q wipefs && command -v wipefs >/dev/null' \
+	|| fail "apk cannot install from the online repositories"
+echo "ok   apk installs from the online repositories"
 echo "PASS ($FIRMWARE)"

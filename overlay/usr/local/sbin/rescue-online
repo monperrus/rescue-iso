@@ -1,0 +1,35 @@
+#!/bin/sh
+# Once a network answers: set the clock (a dead CMOS battery leaves it years behind, and
+# every TLS handshake then fails) and switch apk to the online repositories (the boot
+# repositories only hold what the stick ships, and their indexes conflict with online ones).
+# The machine's RTC is left untouched. Run at boot by rescue.start, log in
+# /var/log/rescue-online.log; safe to rerun. RESCUE_NO_NTP=1 skips NTP (tests the fallback).
+
+i=0
+until ip route | grep -q '^default'; do
+	i=$((i + 1))
+	[ $i -gt 60 ] && { echo "no default route: staying offline"; exit 0; }
+	sleep 2
+done
+
+if [ -z "${RESCUE_NO_NTP:-}" ] && timeout 20 ntpd -n -q -p pool.ntp.org; then
+	echo "clock set by NTP: $(date -u)"
+else
+	# NTP blocked: the Date header of a plain-http response needs no TLS, hence no clock
+	d="$(wget -S --spider -T 10 http://dl-cdn.alpinelinux.org/ 2>&1 | sed -n 's/^ *Date: \(.*\) GMT.*/\1/p' | head -1)"
+	if [ -n "$d" ] && date -u -s "$(date -u -D '%a, %d %b %Y %H:%M:%S' -d "$d" '+%Y-%m-%d %H:%M:%S')" >/dev/null; then
+		echo "clock set from HTTP Date header: $(date -u)"
+	else
+		echo "clock not set: $(date -u)"
+	fi
+fi
+
+mirror=https://dl-cdn.alpinelinux.org/alpine
+v="v$(cut -d. -f1,2 /etc/alpine-release)"
+if wget -q -T 10 -O /dev/null "$mirror/$v/main/x86_64/APKINDEX.tar.gz"; then
+	[ -f /etc/apk/repositories.offline ] || cp /etc/apk/repositories /etc/apk/repositories.offline
+	printf '%s\n' "$mirror/$v/main" "$mirror/$v/community" > /etc/apk/repositories
+	apk update -q && echo "apk: online repositories $mirror/$v"
+else
+	echo "apk: $mirror unreachable, keeping the boot repositories"
+fi

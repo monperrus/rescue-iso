@@ -12,7 +12,11 @@ It boots on BIOS and UEFI, gets DHCP on every NIC, starts sshd, and:
 - prints on the console the IPv4 addresses, the password and the sshd host-key
   fingerprints;
 - ships the repair tools offline: lvm2, cryptsetup, mdadm, e2fsprogs, btrfs-progs,
-  xfsprogs, parted, efibootmgr, pciutils, tmux, bash, curl.
+  xfsprogs, parted, efibootmgr, pciutils, tmux, bash, curl;
+- once a network answers, sets the clock (NTP, or the `Date` header of a plain-http
+  response when NTP is blocked) and switches apk to the online Alpine repositories, so
+  `apk add` and TLS work even on a machine with a dead CMOS battery
+  (`/var/log/rescue-online.log`; the machine's RTC is not written).
 
 ## Usage
 
@@ -50,12 +54,16 @@ No root needed: the official Alpine *standard* ISO (GPG-verified) is remastered 
   (`overlay/` + generated hostname, world, word list, optional key and password). An empty
   `etc/.default_boot_services` keeps Alpine's default boot services next to `sshd` and
   `local`.
-- `overlay/etc/local.d/rescue.start` does DHCP, sets the password, and runs the banner loop; `overlay/etc/ssh/sshd_config.d/rescue.conf` allows root and password
-  login.
+- `overlay/etc/local.d/rescue.start` does DHCP, sets the password, starts
+  `overlay/usr/local/sbin/rescue-online` (clock, online repositories) and runs the banner
+  loop; `overlay/etc/ssh/sshd_config.d/rescue.conf` allows root and password login.
 - New boot menus: no `quiet`, `consoleblank=0`, plus a `nomodeset` entry.
 
 `test.sh` boots the image in QEMU as a USB stick with a throwaway injected key and checks key login, password login,
-wrong-password rejection, the banner, and that the tools are installed.
+wrong-password rejection, the banner, and that the tools are installed. With the RTC set to
+2016 (a dead CMOS battery) and the host's internet access, it also checks that the clock is
+set by NTP and by the HTTP `Date` fallback, and that `apk add` works from the online
+repositories.
 
 ## First use: a server stuck at GRUB after a release upgrade
 
@@ -106,6 +114,28 @@ plugging in the stick; Claude Code did the rest over SSH.
   reinstalled; purging the residual configs of an old NVIDIA driver deleted the
   `nvidia-persistenced` system user. After every purge, check `python3`, failed units and
   service users.
+
+## Second use: Ubuntu on a laptop, installed over SSH
+
+An HP 14 laptop with an encrypted Fedora install was turned into an Ubuntu 26.10 desktop
+without anyone at the keyboard: boot the stick, then `debootstrap` onto the SSD, chroot,
+`ubuntu-desktop`, shim + GRUB, reboot, and the rest (snaps, encrypted home) over SSH on the
+new system.
+
+### Lessons
+
+- **Dead CMOS battery**: the clock booted in 2016, so every TLS connection failed with
+  `certificate verify failed`. Now fixed at boot by `rescue-online`.
+- **Boot repositories are not enough**: their index conflicts with the online one
+  (`package mentioned in index not found`); use only the online repositories once
+  networked. Now done by `rescue-online`.
+- **debootstrap 1.0.142 (Alpine) vs Ubuntu 26.10**: the `Release` file has only SHA512
+  sums. Run with `SHA_SIZE=512` and add `^SHA512:` to the field filter in
+  `/usr/share/debootstrap/functions`; symlink the missing suite script to `gutsy`.
+- Snap-based packages (Firefox, App Center) cannot be installed in a chroot without a
+  running snapd: install them after the first boot.
+- A GNOME login screen suspends the machine after 20 min idle, which looks like a dead
+  network to a remote agent.
 
 ## License
 

@@ -17,6 +17,9 @@ for dev in /sys/class/net/*; do
 	udhcpc -b -q -S -i "$ifname" -x hostname:tiramisu-rescue >/dev/null 2>&1
 done
 
+# clock and online apk repositories, once a network answers
+/usr/local/sbin/rescue-online > /var/log/rescue-online.log 2>&1 &
+
 addresses() {
 	ip -4 -o addr show scope global | awk '{print $2 " " $4}'
 }

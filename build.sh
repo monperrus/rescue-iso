@@ -71,7 +71,7 @@ if [ -n "$PUBKEY" ]; then
 	chmod 600 "$o/etc/rescue/password" "$o/root/.ssh/authorized_keys"
 fi
 chmod 700 "$o/root" "$o/root/.ssh" "$o/etc/rescue"
-chmod 755 "$o/etc/local.d/rescue.start"
+chmod 755 "$o/etc/local.d/rescue.start" "$o/usr/local/sbin/rescue-online"
 # keep Alpine's default sysinit/boot/shutdown services alongside ours
 touch "$o/etc/.default_boot_services"
 ln -s /etc/init.d/sshd "$o/etc/runlevels/default/sshd"

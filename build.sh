@@ -78,8 +78,10 @@ ln -s /etc/init.d/sshd "$o/etc/runlevels/default/sshd"
 ln -s /etc/init.d/local "$o/etc/runlevels/default/local"
 tar -C "$o" --owner=0 --group=0 -czf "$work/tiramisu-rescue.apkovl.tar.gz" .
 
-# boot menus: verbose, no console blanking, a nomodeset fallback entry
-cmdline="modules=loop,squashfs,sd-mod,usb-storage consoleblank=0"
+# boot menus: verbose, no console blanking, a nomodeset fallback entry.
+# usbdelay: nlplug-findfs waits up to 20 s of uevent silence for the boot media (default
+# ~2.5 s); a stick whose first descriptor read times out (error -110) appears only after ~8 s.
+cmdline="modules=loop,squashfs,sd-mod,usb-storage usbdelay=20 consoleblank=0"
 cat > "$work/grub.cfg" <<EOF
 set timeout=5
 

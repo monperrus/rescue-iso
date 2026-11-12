@@ -137,6 +137,13 @@ new system.
 - A GNOME login screen suspends the machine after 20 min idle, which looks like a dead
   network to a remote agent.
 
+## Third boot: a Dell desktop drops to the initramfs shell
+
+`Mounting boot media: failed` at 6.8 s, while the stick (a slow "UDisk") came up at 8.3 s,
+after its first descriptor read timed out (`error -110`). Alpine's `nlplug-findfs` gives up
+after ~2.5 s without new devices; `usbdelay=20` on the kernel command line raises that.
+It is a timeout, not a sleep: a normal boot is no slower.
+
 ## License
 
 MIT

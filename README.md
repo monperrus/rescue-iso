@@ -18,6 +18,8 @@ It boots on BIOS and UEFI, gets DHCP on every NIC, starts sshd, and:
   `apk add` and TLS work even on a machine with a dead CMOS battery
   (`/var/log/rescue-online.log`; the machine's RTC is not written).
 
+Similar projects and how this one differs: [prior-art.md](prior-art.md).
+
 ## Usage
 
 The [latest release](https://github.com/monperrus/rescue-iso/releases/latest) always holds

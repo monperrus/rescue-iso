@@ -1,6 +1,8 @@
 #!/bin/sh
 # Boot out/tiramisu-rescue.iso in QEMU as a USB stick and check it is remotely debuggable.
-# usage: ./test.sh [bios|uefi]   (tests a generic ISO with a throwaway key injected)
+# usage: ./test.sh [bios|uefi|late]   (tests a generic ISO with a throwaway key injected)
+# late: direct kernel boot with no stick, plugged in 15 s later, like a stick whose
+# enumeration stalls on a descriptor-read timeout (error -110)
 set -eu
 cd "$(dirname "$0")"
 
@@ -13,7 +15,15 @@ ISO="$work/test.iso"
 SSH="ssh -p $PORT -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=5 -o LogLevel=ERROR"
 
 firmware_args=""
-if [ "$FIRMWARE" = uefi ]; then
+stick_args="-drive if=none,id=stick,format=raw,file=$ISO -device usb-storage,drive=stick,bootindex=0"
+if [ "$FIRMWARE" = late ]; then
+	xorriso -osirrox on -indev "$ISO" -extract /boot/vmlinuz-lts "$work/vmlinuz" \
+		-extract /boot/initramfs-lts "$work/initramfs" 2>/dev/null
+	cmdline="$(xorriso -osirrox on -indev "$ISO" -extract /boot/grub/grub.cfg /dev/stdout 2>/dev/null \
+		| sed -n 's|^linux\t/boot/vmlinuz-lts ||p' | head -1)"
+	firmware_args="-kernel $work/vmlinuz -initrd $work/initramfs -monitor unix:$work/mon,server,nowait"
+	stick_args=""
+elif [ "$FIRMWARE" = uefi ]; then
 	cp /usr/share/OVMF/OVMF_VARS_4M.fd "$work/vars.fd"
 	firmware_args="-drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd
 		-drive if=pflash,format=raw,file=$work/vars.fd"
@@ -21,11 +31,15 @@ fi
 
 # shellcheck disable=SC2086
 qemu-system-x86_64 -enable-kvm -m 2048 -display none -snapshot $firmware_args \
-	-device qemu-xhci -drive if=none,id=stick,format=raw,file="$ISO" \
-	-device usb-storage,drive=stick,bootindex=0 \
+	-device qemu-xhci $stick_args ${cmdline:+-append "$cmdline"} \
 	-nic user,hostfwd=tcp:127.0.0.1:$PORT-:22 -rtc base=2016-01-18 \
 	-pidfile "$work/qemu.pid" -daemonize
 trap 'kill "$(cat "$work/qemu.pid")" 2>/dev/null; rm -rf "$work"' EXIT
+if [ "$FIRMWARE" = late ]; then
+	sleep 15
+	printf 'drive_add 0 if=none,id=stick,format=raw,file=%s\ndevice_add usb-storage,drive=stick\n' "$ISO" \
+		| socat - "UNIX-CONNECT:$work/mon" >/dev/null
+fi
 
 fail() { echo "FAIL ($FIRMWARE): $*" >&2; exit 1; }
 

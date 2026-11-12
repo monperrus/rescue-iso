@@ -78,10 +78,19 @@ ln -s /etc/init.d/sshd "$o/etc/runlevels/default/sshd"
 ln -s /etc/init.d/local "$o/etc/runlevels/default/local"
 tar -C "$o" --owner=0 --group=0 -czf "$work/tiramisu-rescue.apkovl.tar.gz" .
 
-# boot menus: verbose, no console blanking, a nomodeset fallback entry.
-# usbdelay: nlplug-findfs waits up to 20 s of uevent silence for the boot media (default
-# ~2.5 s); a stick whose first descriptor read times out (error -110) appears only after ~8 s.
-cmdline="modules=loop,squashfs,sd-mod,usb-storage usbdelay=20 consoleblank=0"
+# initramfs: Alpine's /init with a retried boot-media search (initramfs-init.patch), appended
+# as a second cpio archive that overrides /init; the kernel unpacks concatenated archives.
+mkdir "$work/initfs"
+xorriso -osirrox on -indev "cache/$ISO" -extract /boot/initramfs-lts "$work/initramfs-lts" 2>/dev/null
+chmod u+w "$work/initramfs-lts"
+(cd "$work/initfs" && gzip -dc "$work/initramfs-lts" | cpio -id --quiet init)
+patch -s --no-backup-if-mismatch "$work/initfs/init" initramfs-init.patch
+size=$(stat -c %s "$work/initramfs-lts")
+head -c $(( (4 - size % 4) % 4 )) /dev/zero >> "$work/initramfs-lts"
+(cd "$work/initfs" && echo init | cpio -o -H newc -R 0:0 --quiet) >> "$work/initramfs-lts"
+
+# boot menus: verbose, no console blanking, a nomodeset fallback entry
+cmdline="modules=loop,squashfs,sd-mod,usb-storage consoleblank=0"
 cat > "$work/grub.cfg" <<EOF
 set timeout=5
 
@@ -116,6 +125,7 @@ rm -f out/tiramisu-rescue.iso
 xorriso -indev "cache/$ISO" -outdev out/tiramisu-rescue.iso \
 	-map "$work/tiramisu-rescue.apkovl.tar.gz" /tiramisu-rescue.apkovl.tar.gz \
 	-map "$work/extra" /extra \
+	-map "$work/initramfs-lts" /boot/initramfs-lts \
 	-map "$work/grub.cfg" /boot/grub/grub.cfg \
 	-map "$work/syslinux.cfg" /boot/syslinux/syslinux.cfg \
 	-boot_image any replay 2>/dev/null

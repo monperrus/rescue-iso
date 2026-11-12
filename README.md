@@ -30,7 +30,7 @@ sudo dd if=mine.iso of=/dev/sdX bs=4M conv=fsync status=progress
 
 Build it yourself: `./build.sh` makes the generic `out/tiramisu-rescue.iso`;
 `RESCUE_PUBKEY=path.pub ./build.sh` bakes that key and a fixed password (`out/password`,
-delete it to get a new one). `./test.sh bios|uefi` boots the image in QEMU as a USB stick.
+delete it to get a new one). `./test.sh bios|uefi|late` boots the image in QEMU as a USB stick.
 
 If the screen stays black, pick the `nomodeset` entry. Alpine's image is unsigned: disable
 Secure Boot.
@@ -58,12 +58,15 @@ No root needed: the official Alpine *standard* ISO (GPG-verified) is remastered 
   `overlay/usr/local/sbin/rescue-online` (clock, online repositories) and runs the banner
   loop; `overlay/etc/ssh/sshd_config.d/rescue.conf` allows root and password login.
 - New boot menus: no `quiet`, `consoleblank=0`, plus a `nomodeset` entry.
+- Alpine's initramfs `/init`, patched by `initramfs-init.patch` to retry the boot-media
+  search, is appended to `initramfs-lts` as a second cpio archive that overrides `/init`.
 
 `test.sh` boots the image in QEMU as a USB stick with a throwaway injected key and checks key login, password login,
 wrong-password rejection, the banner, and that the tools are installed. With the RTC set to
 2016 (a dead CMOS battery) and the host's internet access, it also checks that the clock is
 set by NTP and by the HTTP `Date` fallback, and that `apk add` works from the online
-repositories.
+repositories. `late` boots the kernel directly and plugs the stick in 15 s later, which the
+unpatched `/init` never finds.
 
 ## First use: a server stuck at GRUB after a release upgrade
 
@@ -141,8 +144,11 @@ new system.
 
 `Mounting boot media: failed` at 6.8 s, while the stick (a slow "UDisk") came up at 8.3 s,
 after its first descriptor read timed out (`error -110`). Alpine's `nlplug-findfs` gives up
-after ~2.5 s without new devices; `usbdelay=20` on the kernel command line raises that.
-It is a timeout, not a sleep: a normal boot is no slower.
+after 5 s without uevents, a constant (`MAX_EVENT_TIMEOUT`): `usbdelay=` sets `-t`, which
+only shortens the wait once the boot repository is found, so it does not help. The patched
+`/init` reruns the search up to 6 times (~30 s); a normal boot finds the stick on the
+first try and is no slower. Rescue without a new image, from the recovery shell:
+`nlplug-findfs -p /sbin/mdev -b /tmp/repositories -a /tmp/apkovls`, then `exit`.
 
 ## License
 

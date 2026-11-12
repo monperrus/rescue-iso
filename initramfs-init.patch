@@ -1,0 +1,24 @@
+--- a/init
++++ b/init
+@@ -900,12 +900,18 @@
+ 
+ # locate boot media and mount it
+ ebegin "Mounting boot media"
++# tiramisu-rescue: nlplug-findfs gives up after 5 s without uevents, and a slow USB stick
++# can stay silent longer (descriptor read error -110); rescan up to 6 times (~30 s)
++findfs_try=1
+ # shellcheck disable=SC2086
+-$MOCK nlplug-findfs $cryptopts -p /sbin/mdev ${KOPT_debug_init:+-d} \
++until $MOCK nlplug-findfs $cryptopts -p /sbin/mdev ${KOPT_debug_init:+-d} \
+ 	${KOPT_usbdelay:+-t $((KOPT_usbdelay*1000))} \
+ 	${KOPT_uevent_buf_size:+-U $KOPT_uevent_buf_size} \
+-	$repoopts -a "$ROOT"/tmp/apkovls
+-eend $?
++	$repoopts -a "$ROOT"/tmp/apkovls; findfs_rc=$?
++	[ $findfs_rc -eq 0 ] || [ $findfs_try -ge 6 ]; do
++	findfs_try=$((findfs_try + 1))
++done
++eend $findfs_rc
+ 
+ # Setup network interfaces
+ if $do_networking; then
